@@ -4,22 +4,25 @@ import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,} from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { SignValidation } from "@/lib/validation";
+import { SignupValidation } from "@/lib/validation";
 import { Loader } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast, useToast } from "@/hooks/use-toast";
 import { useCreateUserAccount , useSignInAccount} from "@/lib/react-query/queriesAndMutations";  
+import { useUserContext } from "@/context/AuthContext";
 import type { use } from "react";
 
 
 const SignupForm = () => {
 
   const { toast } = useToast();
-  const { mutateAsync:createUserAccount, isLoading: isCreatingAccount } = useCreateUserAccount();
-  const { mutateAsync:signInAccount, isLoading: inSigningIn} =useSignInAccount();
+  const { mutateAsync:createUserAccount, isPending: isCreatingAccount } = useCreateUserAccount();
+  const { mutateAsync:signInAccount, isPending: isSigningIn} =useSignInAccount();
+  const { checkAuthUser, isLoading: isUserLoading } = useUserContext();
+  const navigate = useNavigate();
 
-  const form = useForm<z.infer<typeof SignValidation>>({
-    resolver: zodResolver(SignValidation),
+  const form = useForm<z.infer<typeof SignupValidation>>({
+    resolver: zodResolver(SignupValidation),
     defaultValues: {
       name: "",   
       username: "",
@@ -29,7 +32,7 @@ const SignupForm = () => {
   })
 
   // 2. Define a submit handler.
-  async function onSubmit(values: z.infer<typeof SignValidation>) {
+  async function onSubmit(values: z.infer<typeof SignupValidation>) {
     const newUser = await createUserAccount(values);
     if(!newUser){
       return toast({
@@ -44,6 +47,18 @@ const SignupForm = () => {
       return toast({
         title:" Sign in failed",
     })
+  }
+  
+  const isLoggedIn = await checkAuthUser();
+  if(isLoggedIn){
+    form.reset();
+    navigate("/");
+  }
+  else{
+    return toast({
+      title:" Sign in failed"})
+  }
+
 }
 
   return (
