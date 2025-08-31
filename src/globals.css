@@ -4,6 +4,7 @@
 @tailwind components;
 @tailwind utilities;
 
+
 @layer base {
   * {
     @apply box-border list-none p-0 m-0 scroll-smooth;
@@ -222,6 +223,7 @@
     @apply hidden md:flex px-6 py-10 flex-col justify-between min-w-[270px] bg-dark-2;
   }
 
+
   .leftsidebar-link {
     @apply rounded-lg base-medium hover:bg-primary-500 transition;
   }
@@ -239,7 +241,9 @@
   .topbar {
     @apply sticky top-0 z-50 md:hidden bg-dark-2 w-full;
   }
-
+ /* .topbar {
+    @apply sticky top-0 z-50 bg-dark-2 w-full;
+  } */
   /* User card */
   .user-card {
     @apply flex-center flex-col gap-4 border border-dark-4 rounded-[20px] px-5 py-8;
