@@ -1,4 +1,6 @@
+import PostCard from "@/components/shared/PostCard";
 import { useGetRecentPosts } from "@/lib/react-query/queriesAndMutations";
+import type { Models } from "appwrite";
 import { Loader } from "lucide-react";
 import { use } from "react";
 
@@ -13,7 +15,14 @@ const Home = () => {
           {isPostLoading &&!post?(
             <Loader/>
           ):(
-            <ul> test </ul>
+            <ul className="flex flex-col flex-1 gap-9 w-full">
+              {post?.documents.map((post:Models.Document)=>(
+                <li key={post.$id} className="flex justify-center w-full">
+                  <PostCard post={post} />
+                </li>
+              ))}
+              
+            </ul>
           )}
         </div>
       </div>

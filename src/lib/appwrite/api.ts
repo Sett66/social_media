@@ -102,6 +102,7 @@ export async function CreatePost(post:INewPost){
         if(!uploadedFile) throw Error(); 
         // get file url
         const fileUrl = await getFilePreview(uploadedFile.$id);
+        console.log(fileUrl)
         if(!fileUrl) {
             deleteFile(uploadedFile.$id);
             throw Error("no file url");
@@ -141,6 +142,7 @@ export async function uploadFile( file:File){
             ID.unique(),
             file,
         )
+        console.log('上传成功')
         return uplaodedFile;
     }
     catch(error){
@@ -148,27 +150,26 @@ export async function uploadFile( file:File){
     }
 }
 
-export async function getFilePreview(fileId:string) {
+export function getFilePreview(fileId:string) {
     try{
-        const fileUrl = storage.getFilePreview(
-            appwriteConfig.storageId,
-            fileId,
-            2000,
-            2000,
-            ImageGravity.Top,
-            100,
-        )
-        if (!fileUrl) throw Error;
-        return fileUrl;
-    }
-    catch(error){
-        console.log(error);
-    }
+    // 改用 getFileDownload 获取原始文件下载链接
+    const fileUrl = storage.getFileDownload(
+        appwriteConfig.storageId,
+        fileId
+    );
+  
+  if (!fileUrl) throw new Error("文件 URL 获取失败");
+  return fileUrl;
+} catch (error) {
+  console.error("获取文件或文件 URL 时出错:", error);
+  throw error;
+}
 }
 
 export async function deleteFile(fileId:string){
     try {
         await storage.deleteFile(appwriteConfig.storageId,fileId);
+        console.log('删除成功')
         return { status:'success' };
     } catch (error) {
         console.log(error);
@@ -183,4 +184,56 @@ export async function getRecentPosts(){
     )
     if(!posts) throw Error;
     return posts;
+}
+
+export async function likePost(postId:string,likesArray:string[]){
+    try{
+        const updatedPost = await databases.updateDocument(
+        appwriteConfig.databaseId,
+        appwriteConfig.postCollectionId,
+        postId,{
+            likes:likesArray
+        }
+        )
+        if(!updatedPost) throw Error;
+        return updatedPost
+    }
+    catch(error){
+        console.log(error);
+    }
+    
+}
+
+export async function savePost(postId:string,userId:string){
+    try{
+        const updatedPost = await databases.createDocument(
+        appwriteConfig.databaseId,
+        appwriteConfig.savesCollectionId,
+        ID.unique(),
+        {
+            post:postId,
+            user:userId,
+        }
+        )
+        if(!updatedPost) throw Error;
+        return updatedPost
+    }
+    catch(error){
+        console.log(error);
+    }
+}
+
+export async function deleteSavedPost(savedPostId:string){
+    try{
+        const statusCode = await databases.deleteDocument(
+        appwriteConfig.databaseId,
+        appwriteConfig.savesCollectionId,
+        savedPostId
+        )
+        if(!statusCode) throw Error;
+        return {status:'ok'}
+    }
+    catch(error){
+        console.log(error);
+    }
 }

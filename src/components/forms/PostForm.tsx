@@ -13,12 +13,13 @@ import type { Models } from "appwrite"
 import { useToast } from "@/hooks/use-toast"
 import { useUserContext } from "@/context/AuthContext"
 import { useCreatePost } from "@/lib/react-query/queriesAndMutations"
+import type { Post } from "@/types"
 
 
  
 type PostFormProps = {
-  post?:Models.Document;
-}
+  post?: Post; 
+};
 
 const PostForm=({ post }:PostFormProps) =>{
   const { mutateAsync: createPost, isPending: isLoadingCreate } = useCreatePost();
@@ -73,7 +74,7 @@ const PostForm=({ post }:PostFormProps) =>{
               <FormControl>
                 <FileUploader 
                   fieldChange={field.onChange}
-                  mediaUrl={post?.imageUrl}
+                  mediaUrl={post?.imageUrl||''}
                   />
               </FormControl>
               <FormMessage className='shad-form_message'/>
