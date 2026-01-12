@@ -4,7 +4,7 @@ import type { Post } from '@/types';
 import type { Models } from 'appwrite';
 import React from 'react'
 import { Link } from 'react-router-dom';
-import PostStars from './PostStars';
+import PostStars from './PostStats';
 
 type PostCardProps = {
   post: Post; 
