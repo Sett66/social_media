@@ -4,6 +4,7 @@ import "./globals.css";
 import SigninForm from "./_auth/forms/SigninForm";
 import SignupForm from "./_auth/forms/SignupForm";
 import AuthLayout from "./_auth/AuthLayout";
+import OAuthCallback from "./_auth/OauthCallback";
 import RootLayout from "./_root/RootLayout";
 import Home from "./_root/pages/Home";
 import {
@@ -25,6 +26,7 @@ const App = () => {
         <Route element={<AuthLayout />}>
           <Route path="/sign-in" element={<SigninForm />} />
           <Route path="/sign-up" element={<SignupForm />} />
+          <Route path="/oauth-callback" element={<OAuthCallback />} />
         </Route>
 
         {/* private routes*/}

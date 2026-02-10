@@ -69,19 +69,6 @@ const PostForm=({ post , action}:PostFormProps) =>{
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-9 w-full max-x-5xl">
         <FormField
           control={form.control}
-          name="caption"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className='shad-form_lable'>Caption</FormLabel>
-              <FormControl>
-                <Textarea className="shad-textarea custom-scrollbar" {...field} />
-              </FormControl>
-              <FormMessage className='shad-form_message'/>
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
           name="file"
           render={({ field }) => (
             <FormItem>
@@ -91,6 +78,19 @@ const PostForm=({ post , action}:PostFormProps) =>{
                   fieldChange={field.onChange}
                   mediaUrl={post?.imageUrl||''}
                   />
+              </FormControl>
+              <FormMessage className='shad-form_message'/>
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="caption"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className='shad-form_lable'>Caption</FormLabel>
+              <FormControl>
+                <Textarea className="shad-textarea custom-scrollbar" {...field} />
               </FormControl>
               <FormMessage className='shad-form_message'/>
             </FormItem>

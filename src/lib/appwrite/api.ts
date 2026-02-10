@@ -1,7 +1,7 @@
 import type { INewPost, INewUser, IUpdatePost, IUpdateUser } from "@/types";
 import { account, appwriteConfig, avatars, databases, storage } from "./config"
 
-import{ AppwriteException, ID, ImageGravity, Query } from 'appwrite'
+import{ AppwriteException, ID, ImageGravity, Query, OAuthProvider } from 'appwrite'
 
 export async function createUserAccount(user:INewUser){
    try{
@@ -96,7 +96,7 @@ export async function getCurrentUser(){
             ]
         )
         
-        if(!currentUser) throw Error; 
+        if(!currentUser || currentUser.total === 0) throw Error; 
         const userDoc: any = currentUser.documents[0];
 
         // Normalize liked posts' creator: if creator is an ID string, fetch the user document
@@ -488,5 +488,69 @@ export async function getUserPosts(userId?: string) {
     return post;
   } catch (error) {
     console.log(error);
+  }
+}
+
+export async function createOAuth2Session(provider: OAuthProvider) {
+  try {
+    // GitHub 授权成功后，Appwrite 会根据这里的 URL 把用户带回前端
+    const successUrl = `${window.location.origin}/oauth-callback`;
+    const failureUrl = `${window.location.origin}/sign-in`;
+    
+    await account.createOAuth2Session(provider, successUrl, failureUrl);
+  } catch (error) {
+    console.log(error);
+    throw error;
+  }
+}
+
+// 处理 OAuth 回调：如果没有对应用户文档则自动创建
+export async function handleOAuthCallback() {
+  try {
+    // 1. 确认 Appwrite 账户（此时 Session 应该已经存在）
+    const currentAccount = await account.get();
+    if (!currentAccount) {
+      throw new Error('无法获取当前账户');
+    }
+
+    // 2. 尝试在数据库中查找用户文档
+    const existingUsers = await databases.listDocuments(
+      appwriteConfig.databaseId,
+      appwriteConfig.userCollectionId,
+      [Query.equal('accountId', currentAccount.$id)]
+    );
+
+    if (existingUsers.total > 0) {
+      // 已存在用户，直接返回
+      return existingUsers.documents[0];
+    }
+
+    // 3. 第一次用 GitHub 登录：为其创建一条用户文档
+    const baseName =
+      (currentAccount.name && currentAccount.name.trim()) ||
+      (currentAccount.email
+        ? currentAccount.email.split('@')[0]
+        : 'GitHub 用户');
+
+    // username 尽量用邮箱前缀，退而求其次用 accountId 片段
+    const baseUsername =
+      (currentAccount.email
+        ? currentAccount.email.split('@')[0]
+        : `user_${currentAccount.$id.slice(0, 8)}`);
+
+    const imageUrl = avatars.getInitials(baseName);
+
+    const newUser = await saveUserToDB({
+      accountId: currentAccount.$id,
+      email: currentAccount.email,
+      name: baseName,
+      username: baseUsername,
+      imageUrl,
+    });
+
+    return newUser;
+  } catch (error) {
+    console.log('处理 OAuth 回调失败', error);
+    throw error;
   }
 }

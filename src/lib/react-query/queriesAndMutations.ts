@@ -6,9 +6,10 @@ import {
 } from '@tanstack/react-query';
 import { createPost, createUserAccount, deletePost, deleteSavedPost, getCurrentUser, getInfinitePosts, getPostById, 
         getRecentPosts, GetUsers, likePost, savePost, searchPosts, signInAccount, signOutAccount, updatePost,GetUserById,updateUser, 
-        getUserPosts} from '../appwrite/api';
+        getUserPosts, createOAuth2Session, handleOAuthCallback,} from '../appwrite/api';
 import type { INewPost, INewUser, IUpdatePost, IUpdateUser } from '@/types';
 import { QUERY_KEYS } from './queryKeys';
+import type { OAuthProvider } from 'appwrite';
 
 export const useCreateUserAccount =() =>{
     return useMutation({
@@ -204,3 +205,17 @@ export const useGetUserPosts = (userId?: string) => {
         enabled: !!userId,
     });
 };
+
+// GitHub / 其他 Provider 登录（开启 OAuth 流程）
+export const useOAuthLogin = () => {
+    return useMutation({
+      mutationFn: (provider: OAuthProvider) => createOAuth2Session(provider),
+    });
+  };
+  
+  // 回调页中使用，处理用户文档 + 同步状态
+  export const useHandleOAuthCallback = () => {
+    return useMutation({
+      mutationFn: () => handleOAuthCallback(),
+    });
+  };
