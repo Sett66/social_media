@@ -134,14 +134,26 @@ export async function getCurrentUser(){
 
 export async function createPost(post:INewPost){
     try{
-        const uploadedFile = await uploadFile(post.file[0]);
-        if(!uploadedFile) throw Error(); 
-        // get file url
-        const fileUrl = await getFilePreview(uploadedFile.$id);
-        console.log(fileUrl)
-        if(!fileUrl) {
-            deleteFile(uploadedFile.$id);
-            throw Error("no file url");
+        let imageIds: string[] = [];
+        let imageUrls: (string | URL)[] = [];
+
+        // 有文件时才上传；否则允许发“纯文字帖子”
+        if (post.file && post.file.length > 0) {
+            const uploadedFiles = await Promise.all(
+                post.file.map(async (f) => {
+                    const uploaded = await uploadFile(f);
+                    if(!uploaded) throw Error("upload failed");
+                    const url = await getFilePreview(uploaded.$id);
+                    if(!url){
+                        await deleteFile(uploaded.$id);
+                        throw Error("no file url");
+                    }
+                    return { id: uploaded.$id, url };
+                })
+            );
+
+            imageIds = uploadedFiles.map((x) => x.id);
+            imageUrls = uploadedFiles.map((x) => x.url);
         }
 
         //convert tags in an array
@@ -154,14 +166,15 @@ export async function createPost(post:INewPost){
             {
                 creator:post.userId,
                 caption:post.caption,
-                imageUrl:fileUrl,
-                imageId:uploadedFile.$id,
+                imageUrls,
+                imageIds,
                 location:post.location,
                 tags:tags,
             }
         )
         if(!newPost) {
-            deleteFile(uploadedFile.$id);
+            // rollback: delete all uploaded files
+            await Promise.all(imageIds.map((id) => deleteFile(id)));
             throw Error();
         }
         return newPost;
@@ -292,23 +305,34 @@ export async function updatePost(post:IUpdatePost){
     const hasFileToUpdate = post.file.length>0;
 
     try{
-        let image={
-            imageUrl:post.imageUrl,
-            imageId:post.postId
+        // kept old images (after user removed some in UI)
+        const keptImageIds =
+            post.keptImageIds ??
+            post.imageIds ??
+            ((post as any).imageId ? [(post as any).imageId] : []);
+        const keptImageUrls =
+            post.keptImageUrls ??
+            post.imageUrls ??
+            ((post as any).imageUrl ? [(post as any).imageUrl] : []);
+
+        let newUploaded: { id: string; url: URL }[] = [];
+        if(hasFileToUpdate){
+            newUploaded = await Promise.all(
+                post.file.map(async (f) => {
+                    const uploaded = await uploadFile(f);
+                    if(!uploaded) throw Error("upload failed");
+                    const url = await getFilePreview(uploaded.$id);
+                    if(!url){
+                        await deleteFile(uploaded.$id);
+                        throw Error("no file url");
+                    }
+                    return { id: uploaded.$id, url };
+                })
+            );
         }
 
-        if(hasFileToUpdate){
-            const uploadedFile = await uploadFile(post.file[0]);
-            if(!uploadedFile) throw Error(); 
-            // get file url
-            const fileUrl = await getFilePreview(uploadedFile.$id);
-            console.log(fileUrl)
-            if(!fileUrl) {
-                deleteFile(uploadedFile.$id);
-                throw Error("no file url");
-        }
-        image = { ...image, imageUrl:fileUrl, imageId:uploadedFile.$id}
-        }
+        const finalImageIds = [...keptImageIds, ...newUploaded.map((x) => x.id)];
+        const finalImageUrls = [...keptImageUrls, ...newUploaded.map((x) => x.url)];
 
         //convert tags in an array
         const tags = post.tags?.replace(/ /g, '').split('#')||[];
@@ -319,15 +343,23 @@ export async function updatePost(post:IUpdatePost){
             post.postId,
             {
                 caption:post.caption,
-                imageUrl:image.imageUrl,
-                imageId:image.imageId,
+                imageUrls:finalImageUrls as any,
+                imageIds:finalImageIds,
                 location:post.location,
                 tags:tags,
             }
         )
         if(!updatedPost) {
-            deleteFile(post.imageId);
+            // rollback newly uploaded files
+            if(newUploaded.length > 0){
+                await Promise.all(newUploaded.map((x) => deleteFile(x.id)));
+            }
             throw Error();
+        }
+
+        // delete removed old images (from storage)
+        if(Array.isArray(post.removedImageIds) && post.removedImageIds.length > 0){
+            await Promise.all(post.removedImageIds.map((id) => deleteFile(id)));
         }
         return updatedPost;
     }
@@ -336,14 +368,20 @@ export async function updatePost(post:IUpdatePost){
     }
 }
 
-export async function deletePost(postId:string, imageId:string){
-    if(!postId||!imageId) throw Error;
+export async function deletePost(postId:string, imageIds:string | string[]){
+    if(!postId) throw Error;
     try{
         await databases.deleteDocument(
             appwriteConfig.databaseId,
             appwriteConfig.postCollectionId,
             postId
         )
+
+        // best effort delete storage files
+        const ids = Array.isArray(imageIds) ? imageIds : (imageIds ? [imageIds] : []);
+        if(ids.length > 0){
+            await Promise.all(ids.map((id) => deleteFile(id)));
+        }
         return { status:'ok'}
     }catch(error){
         console.log(error);

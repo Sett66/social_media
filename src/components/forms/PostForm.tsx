@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useUserContext } from "@/context/AuthContext"
 import { useCreatePost, useUpdatePost } from "@/lib/react-query/queriesAndMutations"
 import type { Post } from "@/types"
+import React, { useEffect, useMemo, useState } from "react"
 
 
  
@@ -29,6 +30,24 @@ const PostForm=({ post , action}:PostFormProps) =>{
   const { user } = useUserContext();
   const { toast }= useToast();
   const navigate=useNavigate();
+
+  // For update: keep/remove existing images (stored in Appwrite)
+  const initialExisting = useMemo(() => {
+    const urls = (post?.imageUrls?.map(String) ?? (post?.imageUrl ? [post.imageUrl] : [])) as string[];
+    const ids = post?.imageIds ?? (post?.imageId ? [post.imageId] : []);
+    return { urls, ids };
+  }, [post]);
+
+  const [keptImageUrls, setKeptImageUrls] = useState<string[]>(initialExisting.urls);
+  const [keptImageIds, setKeptImageIds] = useState<string[]>(initialExisting.ids);
+  const [removedImageIds, setRemovedImageIds] = useState<string[]>([]);
+
+  // when switching between posts (or initial fetch), refresh kept lists
+  useEffect(() => {
+    setKeptImageUrls(initialExisting.urls);
+    setKeptImageIds(initialExisting.ids);
+    setRemovedImageIds([]);
+  }, [initialExisting.urls, initialExisting.ids]);
 
   const form = useForm<z.infer<typeof PostValidation>>({
     resolver: zodResolver(PostValidation),
@@ -46,8 +65,9 @@ const PostForm=({ post , action}:PostFormProps) =>{
       const updatedPost= await updatePost({
         ...values,
         postId:post.$id,
-        imageId:post?.imageId,
-        imageUrl:post?.imageUrl
+        keptImageIds,
+        keptImageUrls,
+        removedImageIds,
       })
       if(!updatedPost){
         toast({title:'update fail'})
@@ -76,7 +96,23 @@ const PostForm=({ post , action}:PostFormProps) =>{
               <FormControl>
                 <FileUploader 
                   fieldChange={field.onChange}
-                  mediaUrl={post?.imageUrl||''}
+                  mediaUrls={keptImageUrls}
+                  onRemoveExisting={(index) => {
+                    setRemovedImageIds((prev) => {
+                      const id = keptImageIds[index];
+                      return id ? [...prev, id] : prev;
+                    });
+                    setKeptImageIds((prev) => {
+                      const next = [...prev];
+                      next.splice(index, 1);
+                      return next;
+                    });
+                    setKeptImageUrls((prev) => {
+                      const next = [...prev];
+                      next.splice(index, 1);
+                      return next;
+                    });
+                  }}
                   />
               </FormControl>
               <FormMessage className='shad-form_message'/>
