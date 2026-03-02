@@ -108,10 +108,10 @@ const PostForm = ({ post, action }: PostFormProps) => {
     const firstUrl = keptImageUrls.length > 0 ? keptImageUrls[0] : null;
 
     const imageSource = firstFile ?? firstUrl;
-    if (!imageSource) {
-      toast({ title: "请先添加图片", variant: "destructive" });
-      return;
-    }
+    // if (!imageSource) {
+    //   toast({ title: "请先添加图片", variant: "destructive" });
+    //   return;
+    // }
 
     setIsGeneratingCaption(true);
     try {
@@ -130,8 +130,8 @@ const PostForm = ({ post, action }: PostFormProps) => {
     }
   };
 
-  const hasAnyImage =
-    (form.watch("file")?.length ?? 0) > 0 || keptImageUrls.length > 0;
+  // const hasAnyImage =
+  //   (form.watch("file")?.length ?? 0) > 0 || keptImageUrls.length > 0;
 
   return (
     <Form {...form}>
@@ -171,32 +171,32 @@ const PostForm = ({ post, action }: PostFormProps) => {
             </FormItem>
           )}
         />
-        {hasAnyImage && (
-          <div className="space-y-2">
-            <FormLabel className="shad-form_lable">
-              AI 生成 Caption（可选）
-            </FormLabel>
-            <div className="flex gap-2 flex-wrap">
-              <Input
-                type="text"
-                className="shad-input flex-1 min-w-[160px]"
-                placeholder="输入提示词，如：强调美食、氛围感、旅行心情"
-                value={aiPromptHint}
-                onChange={(e) => setAiPromptHint(e.target.value)}
-                disabled={isGeneratingCaption}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                className="shad-button_dark_4 whitespace-nowrap"
-                onClick={handleGenerateCaption}
-                disabled={isGeneratingCaption}
-              >
-                {isGeneratingCaption ? "生成中..." : "AI 生成 Caption"}
-              </Button>
-            </div>
+        {/* {hasAnyImage && ( */}
+        <div className="space-y-2">
+          <FormLabel className="shad-form_lable">
+            AI 生成 Caption（可选）
+          </FormLabel>
+          <div className="flex gap-2 flex-wrap">
+            <Input
+              type="text"
+              className="shad-input flex-1 min-w-[160px]"
+              placeholder="输入提示词，如：强调美食、氛围感、旅行心情"
+              value={aiPromptHint}
+              onChange={(e) => setAiPromptHint(e.target.value)}
+              disabled={isGeneratingCaption}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="shad-button_dark_4 whitespace-nowrap"
+              onClick={handleGenerateCaption}
+              disabled={isGeneratingCaption}
+            >
+              {isGeneratingCaption ? "生成中..." : "AI 生成 Caption"}
+            </Button>
           </div>
-        )}
+        </div>
+        {/* )} */}
         <FormField
           control={form.control}
           name="caption"
