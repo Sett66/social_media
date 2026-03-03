@@ -26,6 +26,39 @@ import type { Post } from "@/types";
 import { generateCaptionWithGemini } from "@/lib/gemini/generateCaption";
 import { useEffect, useMemo, useState } from "react";
 
+/**
+ * Extract hashtags from the end of caption text
+ * Returns cleaned caption and hashtags formatted with # separator
+ */
+function extractHashtagsFromCaption(text: string): {
+  caption: string;
+  hashtags: string;
+} {
+  // Extract all hashtags (including Chinese characters) from the text
+  const hashtagPattern = /(#[\u4e00-\u9fff\w]+)/g;
+  const matches = text.match(hashtagPattern);
+
+  if (!matches || matches.length === 0) {
+    console.log("[extractHashtagsFromCaption] No hashtags found in:", text);
+    return { caption: text, hashtags: "" };
+  }
+
+  // Remove all hashtags from the caption and clean up
+  let cleanCaption = text;
+  matches.forEach((tag) => {
+    cleanCaption = cleanCaption.replace(tag, "").trim();
+  });
+  cleanCaption = cleanCaption.replace(/\s+/g, " ").trim();
+
+  // Keep # prefix and join with comma and space
+  const tags = matches.join(", ");
+
+  console.log("[extractHashtagsFromCaption] Found hashtags:", tags);
+  console.log("[extractHashtagsFromCaption] Clean caption:", cleanCaption);
+
+  return { caption: cleanCaption, hashtags: tags };
+}
+
 type PostFormProps = {
   post?: Post;
   action: "Create" | "Update";
@@ -72,7 +105,7 @@ const PostForm = ({ post, action }: PostFormProps) => {
       caption: post ? post?.caption : "",
       file: [],
       location: post ? post?.location : "",
-      tags: post ? post.tags.join("#") : "",
+      tags: post ? `#${post.tags.join(", #")}` : "",
     },
   });
 
@@ -102,24 +135,45 @@ const PostForm = ({ post, action }: PostFormProps) => {
   }
 
   const handleGenerateCaption = async () => {
-    const files = form.getValues("file") ?? [];
-    const firstFile =
-      Array.isArray(files) && files.length > 0 ? files[0] : null;
-    const firstUrl = keptImageUrls.length > 0 ? keptImageUrls[0] : null;
+    // collect any newly uploaded files and kept urls
+    const files = (form.getValues("file") as File[]) ?? [];
+    const imageSources: Array<File | string> = [];
+    if (files.length) imageSources.push(...files);
+    if (keptImageUrls.length) imageSources.push(...keptImageUrls);
 
-    const imageSource = firstFile ?? firstUrl;
-    // if (!imageSource) {
-    //   toast({ title: "请先添加图片", variant: "destructive" });
-    //   return;
-    // }
+    // if we have at least one image, pass the array; otherwise undefined
 
     setIsGeneratingCaption(true);
     try {
-      const caption = await generateCaptionWithGemini(
-        imageSource as File | string,
+      const generatedCaption = await generateCaptionWithGemini(
+        imageSources.length > 0 ? imageSources : undefined,
         aiPromptHint || undefined,
       );
+      // Extract hashtags from the end of caption
+      const { caption, hashtags } =
+        extractHashtagsFromCaption(generatedCaption);
+      console.log(
+        "[handleGenerateCaption] Generated caption:",
+        generatedCaption,
+      );
+      console.log(
+        "[handleGenerateCaption] After extraction - caption:",
+        caption,
+        "hashtags:",
+        hashtags,
+      );
       form.setValue("caption", caption);
+      // If hashtags were found, merge with existing tags
+      if (hashtags) {
+        const currentTags = form.getValues("tags");
+        const mergedTags = currentTags
+          ? `${currentTags}, ${hashtags}`
+          : hashtags;
+        console.log("[handleGenerateCaption] Setting tags to:", mergedTags);
+        form.setValue("tags", mergedTags);
+      } else {
+        console.log("[handleGenerateCaption] No hashtags extracted");
+      }
       toast({ title: "AI caption 生成成功" });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "生成失败，请稍后重试";
@@ -232,13 +286,13 @@ const PostForm = ({ post, action }: PostFormProps) => {
           render={({ field }) => (
             <FormItem>
               <FormLabel className="shad-form_lable">
-                Add Tags(separated by ",")
+                Add Tags(separated by ", ")
               </FormLabel>
               <FormControl>
                 <Input
                   type="text"
                   className="shad-input"
-                  placeholder="AI, Arts, React"
+                  placeholder="#AI, #Arts, #React"
                   {...field}
                 />
               </FormControl>

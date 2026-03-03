@@ -44,49 +44,64 @@ async function urlToBase64(url: string): Promise<{ data: string; mimeType: strin
 
 /**
  * 使用 Gemini 根据图片和用户提示词生成 caption
- * @param imageSource - File 或图片 URL
+ * @param imageSources - 可以是 File 或图片 URL 的数组，或为 undefined
  * @param userPrompt - 用户输入的提示词，如「强调美食、氛围感」
  * @returns 生成的 caption 文本
  */
 export async function generateCaptionWithGemini(
-  imageSource: File | string,
+  imageSources?: Array<File | string>,
   userPrompt?: string
 ): Promise<string> {
   if (!apiKey) {
     throw new Error("未配置 VITE_GEMINI_API_KEY，请在 .env.local 中设置");
   }
 
-  let base64Data: string;
-  let mimeType: string;
+  // internal helper: normalize a source into {data, mimeType}
+  async function normalize(source: File | string) {
+    if (source instanceof File) {
+      const data = await fileToBase64(source);
+      return { data, mimeType: source.type || "image/jpeg" };
+    } else {
+      return await urlToBase64(source);
+    }
+  }
 
-  if (imageSource instanceof File) {
-    base64Data = await fileToBase64(imageSource);
-    mimeType = imageSource.type || "image/jpeg";
-  } else {
-    const parsed = await urlToBase64(imageSource);
-    base64Data = parsed.data;
-    mimeType = parsed.mimeType;
+  const hasImages = !!(imageSources && imageSources.length > 0);
+  const trimmedHint = userPrompt?.trim();
+  const prompt = (() => {
+    if (hasImages) {
+      if (trimmedHint) {
+        return `根据这些图片和用户提供的提示，直接生成一段适合社交媒体的 caption，是能直接发布的，没有其他多余的输出。用户提示：${trimmedHint}\n\n请用简洁、自然的语言写一段 caption，长度适中。`;
+      }
+      return "根据这些图片，生成一段适合社交媒体的 caption。请用简洁、自然的语言描述图片内容，长度适中。";
+    }
+    // no images
+    if (trimmedHint) {
+      return `根据用户提供的提示，生成一段适合社交媒体的 caption。用户提示：${trimmedHint}\n\n请用简洁、自然的语言写一段 caption，长度适中。`;
+    }
+    return "请生成一段适合社交媒体的通用 caption，使用简洁、自然的语言。";
+  })();
+
+  // build parts array for model
+  const parts: any[] = [{ text: prompt }];
+  if (hasImages) {
+    for (const src of imageSources!) {
+      try {
+        const { data, mimeType } = await normalize(src);
+        parts.push({ inlineData: { mimeType, data } });
+      } catch (err) {
+        console.warn("failed to convert image for caption", err);
+      }
+    }
   }
 
   const ai = new GoogleGenAI({ apiKey });
-  const prompt = userPrompt?.trim()
-    ? `根据这张图片和用户提供的提示，直接生成一段适合社交媒体的 caption，是能直接发布的，没有其他多余的输出。用户提示：${userPrompt}\n\n请用简洁、自然的语言写一段 caption，长度适中。`
-    : "根据这张图片，生成一段适合社交媒体的 caption。请用简洁、自然的语言描述图片内容，长度适中。";
-
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
     contents: [
       {
         role: "user",
-        parts: [
-          { text: prompt },
-          {
-            inlineData: {
-              mimeType,
-              data: base64Data,
-            },
-          },
-        ],
+        parts,
       },
     ],
   });

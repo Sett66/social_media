@@ -212,10 +212,10 @@ export const useOAuthLogin = () => {
       mutationFn: (provider: OAuthProvider) => createOAuth2Session(provider),
     });
   };
-  
-  // 回调页中使用，处理用户文档 + 同步状态
-  export const useHandleOAuthCallback = () => {
+
+// 回调页中使用，处理用户文档 + 同步状态
+export const useHandleOAuthCallback = () => {
     return useMutation({
       mutationFn: () => handleOAuthCallback(),
     });
-  };
+};

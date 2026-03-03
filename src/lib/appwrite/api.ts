@@ -156,8 +156,11 @@ export async function createPost(post:INewPost){
             imageUrls = uploadedFiles.map((x) => x.url);
         }
 
-        //convert tags in an array
-        const tags = post.tags?.replace(/ /g, '').split(',')||[];
+        //convert tags in an array (handle #tag1, #tag2 format)
+        const tags = post.tags
+          ?.split(',')
+          .map((tag) => tag.trim().replace(/^#/, ''))
+          .filter((tag) => tag.length > 0) || [];
         // save to database
         const newPost = await databases.createDocument(
             appwriteConfig.databaseId,
@@ -334,8 +337,11 @@ export async function updatePost(post:IUpdatePost){
         const finalImageIds = [...keptImageIds, ...newUploaded.map((x) => x.id)];
         const finalImageUrls = [...keptImageUrls, ...newUploaded.map((x) => x.url)];
 
-        //convert tags in an array
-        const tags = post.tags?.replace(/ /g, '').split('#')||[];
+        //convert tags in an array (handle #tag1, #tag2 format)
+        const tags = post.tags
+          ?.split(',')
+          .map((tag) => tag.trim().replace(/^#/, ''))
+          .filter((tag) => tag.length > 0) || [];
         // save to database
         const updatedPost = await databases.updateDocument(
             appwriteConfig.databaseId,
