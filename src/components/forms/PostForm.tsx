@@ -269,19 +269,6 @@ const PostForm = ({ post, action }: PostFormProps) => {
         />
         <FormField
           control={form.control}
-          name="location"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="shad-form_lable">Add Location</FormLabel>
-              <FormControl>
-                <Input type="text" className="shad-input" {...field} />
-              </FormControl>
-              <FormMessage className="shad-form_message" />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
           name="tags"
           render={({ field }) => (
             <FormItem>
@@ -295,6 +282,19 @@ const PostForm = ({ post, action }: PostFormProps) => {
                   placeholder="#AI, #Arts, #React"
                   {...field}
                 />
+              </FormControl>
+              <FormMessage className="shad-form_message" />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="location"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="shad-form_lable">Add Location</FormLabel>
+              <FormControl>
+                <Input type="text" className="shad-input" {...field} />
               </FormControl>
               <FormMessage className="shad-form_message" />
             </FormItem>
