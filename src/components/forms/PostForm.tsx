@@ -39,7 +39,7 @@ function extractHashtagsFromCaption(text: string): {
   const matches = text.match(hashtagPattern);
 
   if (!matches || matches.length === 0) {
-    console.log("[extractHashtagsFromCaption] No hashtags found in:", text);
+    // console.log("[extractHashtagsFromCaption] No hashtags found in:", text);
     return { caption: text, hashtags: "" };
   }
 
@@ -53,8 +53,8 @@ function extractHashtagsFromCaption(text: string): {
   // Keep # prefix and join with comma and space
   const tags = matches.join(", ");
 
-  console.log("[extractHashtagsFromCaption] Found hashtags:", tags);
-  console.log("[extractHashtagsFromCaption] Clean caption:", cleanCaption);
+  // console.log("[extractHashtagsFromCaption] Found hashtags:", tags);
+  // console.log("[extractHashtagsFromCaption] Clean caption:", cleanCaption);
 
   return { caption: cleanCaption, hashtags: tags };
 }
@@ -152,16 +152,16 @@ const PostForm = ({ post, action }: PostFormProps) => {
       // Extract hashtags from the end of caption
       const { caption, hashtags } =
         extractHashtagsFromCaption(generatedCaption);
-      console.log(
-        "[handleGenerateCaption] Generated caption:",
-        generatedCaption,
-      );
-      console.log(
-        "[handleGenerateCaption] After extraction - caption:",
-        caption,
-        "hashtags:",
-        hashtags,
-      );
+      // console.log(
+      //   "[handleGenerateCaption] Generated caption:",
+      //   generatedCaption,
+      // );
+      // console.log(
+      //   "[handleGenerateCaption] After extraction - caption:",
+      //   caption,
+      //   "hashtags:",
+      //   hashtags,
+      // );
       form.setValue("caption", caption);
       // If hashtags were found, merge with existing tags
       if (hashtags) {
@@ -169,7 +169,7 @@ const PostForm = ({ post, action }: PostFormProps) => {
         const mergedTags = currentTags
           ? `${currentTags}, ${hashtags}`
           : hashtags;
-        console.log("[handleGenerateCaption] Setting tags to:", mergedTags);
+        // console.log("[handleGenerateCaption] Setting tags to:", mergedTags);
         form.setValue("tags", mergedTags);
       } else {
         console.log("[handleGenerateCaption] No hashtags extracted");

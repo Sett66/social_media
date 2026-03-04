@@ -1,3 +1,4 @@
+import { useState } from "react";
 import GridPostList from "@/components/shared/GridPostList";
 import PostStars from "@/components/shared/PostStats";
 import { Button } from "@/components/ui/button";
@@ -15,15 +16,17 @@ const PostDetails = () => {
   const { id } = useParams();
   const { data: post, isPending } = useGetPostById(id || "");
   const { user } = useUserContext();
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const navigate = useNavigate();
   const { data: userPosts, isPending: isUserPostLoading } = useGetUserPosts(
-    post?.creator.$id
+    post?.creator.$id,
   );
   const { mutate: deletePost } = useDeletePost();
 
   const relatedPosts = userPosts?.documents.filter(
-    (userPost) => userPost.$id !== id
+    (userPost) => userPost.$id !== id,
   );
 
   const handleDeletePost = () => {
@@ -65,20 +68,96 @@ const PostDetails = () => {
                     : "w-full"
                 }
               >
-                {/* 左侧：多图区域（仅在有图时占据宽度） */}
+                {/* 左侧：图片区域（仅在有图时占据宽度） */}
                 {hasImages && (
                   <div className="w-full lg:w-1/2 mb-6 lg:mb-0">
-                    {/* 每行固定 2 张图片，避免右侧信息过窄 */}
-                    <div className="grid grid-cols-2 gap-3">
-                      {(post.imageUrls as (string | URL)[]).map(
-                        (url, index) => (
-                          <img
-                            key={`${String(url)}-${index}`}
-                            src={String(url)}
-                            alt={`post image ${index + 1}`}
-                            className="w-full h-60 md:h-72 object-cover rounded-xl"
-                          />
-                        )
+                    <div className="relative rounded-xl overflow-hidden bg-dark-1">
+                      {/* 当前显示的图片 */}
+                      <img
+                        src={String(
+                          (post.imageUrls as (string | URL)[])[
+                            currentImageIndex
+                          ],
+                        )}
+                        alt="post image"
+                        className="w-full h-80 md:h-96 object-cover cursor-pointer"
+                        onClick={() =>
+                          setSelectedImage(
+                            String(
+                              (post.imageUrls as (string | URL)[])[
+                                currentImageIndex
+                              ],
+                            ),
+                          )
+                        }
+                      />
+
+                      {/* 左箭头 */}
+                      {(post.imageUrls as (string | URL)[]).length > 1 && (
+                        <button
+                          onClick={() =>
+                            setCurrentImageIndex(
+                              (prevIndex) =>
+                                (prevIndex -
+                                  1 +
+                                  (post.imageUrls as (string | URL)[]).length) %
+                                (post.imageUrls as (string | URL)[]).length,
+                            )
+                          }
+                          className="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition"
+                          aria-label="Previous image"
+                        >
+                          <svg
+                            className="w-6 h-6"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M15 19l-7-7 7-7"
+                            />
+                          </svg>
+                        </button>
+                      )}
+
+                      {/* 右箭头 */}
+                      {(post.imageUrls as (string | URL)[]).length > 1 && (
+                        <button
+                          onClick={() =>
+                            setCurrentImageIndex(
+                              (prevIndex) =>
+                                (prevIndex + 1) %
+                                (post.imageUrls as (string | URL)[]).length,
+                            )
+                          }
+                          className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition"
+                          aria-label="Next image"
+                        >
+                          <svg
+                            className="w-6 h-6"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 5l7 7-7 7"
+                            />
+                          </svg>
+                        </button>
+                      )}
+
+                      {/* 图片计数器 */}
+                      {(post.imageUrls as (string | URL)[]).length > 1 && (
+                        <div className="absolute top-3 right-3 bg-black/40 text-white px-3 py-1 rounded-full text-sm">
+                          {currentImageIndex + 1} /{" "}
+                          {(post.imageUrls as (string | URL)[]).length}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -170,6 +249,19 @@ const PostDetails = () => {
               </div>
             );
           })()}
+          {/* lightbox modal for selected image */}
+          {selectedImage && (
+            <div
+              className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
+              onClick={() => setSelectedImage(null)}
+            >
+              <img
+                src={selectedImage}
+                alt="full view"
+                className="max-w-full max-h-full"
+              />
+            </div>
+          )}
         </div>
       )}
 
