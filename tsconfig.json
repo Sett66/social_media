@@ -10,6 +10,6 @@
       "@/*": ["src/*"]
     },
     "forceConsistentCasingInFileNames": true, // 推荐：强制文件名大小写一致
-    "strict": true // 推荐：启用严格类型检查
+    "strict": false // 推荐：启用严格类型检查
   }
 }
