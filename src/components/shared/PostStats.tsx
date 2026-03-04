@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-// import type { Post } from "@/types";
 import type { Models } from "appwrite";
 import {
   useDeleteSavedPost,
@@ -15,11 +14,14 @@ type PostStatsProps = {
 };
 
 const PostStats = ({ post, userId }: PostStatsProps) => {
-  const likesList: string[] = (post?.likes ?? []).map(
-    (user: Models.Document) => user.$id
-  );
+  // 🌟 核心修复 1：兼容 Appwrite 返回的 likes 是字符串数组还是对象数组
+  const getLikes = (likesArray: any[]) => {
+    return likesArray.map((user: any) =>
+      typeof user === "string" ? user : user.$id,
+    );
+  };
 
-  const [likes, setLikes] = useState<string[]>(likesList);
+  const [likes, setLikes] = useState<string[]>(getLikes(post?.likes ?? []));
   const [isSaved, setIsSaved] = useState(false);
 
   const { mutate: likePost } = useLikePost();
@@ -28,17 +30,24 @@ const PostStats = ({ post, userId }: PostStatsProps) => {
 
   const { data: currentUser } = useGetCurrentUser();
 
-  const savedPostRecord = currentUser?.save.find(
-    (record: Models.Document) => record.post.$id === post?.$id
-  );
+  // 🌟 核心修复 2：兼容 record.post 是字符串还是对象
+  const checkIsSaved = () => {
+    if (!currentUser?.save || !post?.$id) return false;
+    return !!currentUser.save.find((record: any) => {
+      const recordPostId =
+        typeof record.post === "string" ? record.post : record.post?.$id;
+      return recordPostId === post.$id;
+    });
+  };
 
+  // 监听数据变化，确保异步加载时状态能同步
   useEffect(() => {
-    setLikes((post?.likes ?? []).map((user: Models.Document) => user.$id));
+    setLikes(getLikes(post?.likes ?? []));
   }, [post?.likes]);
 
   useEffect(() => {
-    setIsSaved(!!savedPostRecord);
-  }, [currentUser]);
+    setIsSaved(checkIsSaved());
+  }, [currentUser, post?.$id]);
 
   const handleLikePost = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -56,9 +65,16 @@ const PostStats = ({ post, userId }: PostStatsProps) => {
   const handleSavePost = (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    if (savedPostRecord) {
+    // 再次安全提取寻找要删除的 record
+    const savedRecord = currentUser?.save.find((record: any) => {
+      const recordPostId =
+        typeof record.post === "string" ? record.post : record.post?.$id;
+      return recordPostId === post?.$id;
+    });
+
+    if (savedRecord) {
       setIsSaved(false);
-      deleteSavedPost(savedPostRecord.$id);
+      deleteSavedPost(savedRecord.$id);
     } else {
       savePost({ postId: post?.$id || "", userId });
       setIsSaved(true);
@@ -87,7 +103,7 @@ const PostStats = ({ post, userId }: PostStatsProps) => {
           <img
             className="cursor-pointer"
             src={isSaved ? "/assets/icons/saved.svg" : "/assets/icons/save.svg"}
-            alt="like"
+            alt="save"
             width={20}
             height={20}
             onClick={handleSavePost}

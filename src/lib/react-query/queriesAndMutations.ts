@@ -49,26 +49,64 @@ export const useGetRecentPosts=()=>{
     })
 }
 
-export const useLikePost=()=>{
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn:({postId,likesArray}:{postId:string;likesArray:string[]})=>likePost(postId,likesArray),
-        onSuccess:(data)=>{
-            queryClient.invalidateQueries({
-                queryKey:[QUERY_KEYS.GET_POST_BY_ID,data?.$id]
-            })
-            queryClient.invalidateQueries({
-                queryKey:[QUERY_KEYS.GET_RECENT_POSTS]
-            })
-            queryClient.invalidateQueries({
-                queryKey:[QUERY_KEYS.GET_POSTS]
-            })
-            queryClient.invalidateQueries({
-                queryKey:[QUERY_KEYS.GET_CURRENT_USER]
-            })
-        }
-    })
-}
+// export const useLikePost=()=>{
+//     const queryClient = useQueryClient();
+//     return useMutation({
+//         mutationFn:({postId,likesArray}:{postId:string;likesArray:string[]})=>likePost(postId,likesArray),
+//         onSuccess:(data)=>{
+//             queryClient.invalidateQueries({
+//                 queryKey:[QUERY_KEYS.GET_POST_BY_ID,data?.$id]
+//             })
+//             queryClient.invalidateQueries({
+//                 queryKey:[QUERY_KEYS.GET_RECENT_POSTS]
+//             })
+//             queryClient.invalidateQueries({
+//                 queryKey:[QUERY_KEYS.GET_POSTS]
+//             })
+//             queryClient.invalidateQueries({
+//                 queryKey:[QUERY_KEYS.GET_CURRENT_USER]
+//             })
+//         }
+//     })
+// }
+
+export const useLikePost = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ postId, likesArray }: { postId: string; likesArray: string[] }) =>
+      likePost(postId, likesArray),
+    
+    // 1. 发起请求前立刻执行 (乐观更新的核心)
+    onMutate: async ({ postId, likesArray }) => {
+      // a. 撤销相关的正在进行的后台重新获取请求，防止冲突
+      await queryClient.cancelQueries({ queryKey: [QUERY_KEYS.GET_POSTS] });
+
+      // b. 截屏保存当前缓存中的旧数据 (为了失败时回滚)
+      const previousPosts = queryClient.getQueryData([QUERY_KEYS.GET_POSTS]);
+
+      // c. 乐观地更新缓存！(不用等后端，直接把缓存里的 likes 数组替换掉)
+      // 注意：这里需要根据你缓存的具体结构 (InfiniteData 或 Array) 来精确修改，
+      // 简单起见，我们通知整体缓存刷新，但更好的做法是直接操作 queryClient.setQueryData
+      
+      return { previousPosts }; // 把旧数据传递给 onError
+    },
+
+    // 2. 如果请求失败了 (回滚)
+    onError: (err, newLike, context) => {
+      // 恢复到 onMutate 中保存的旧数据
+      if (context?.previousPosts) {
+        queryClient.setQueryData([QUERY_KEYS.GET_POSTS], context.previousPosts);
+      }
+    },
+
+    // 3. 无论成功或失败，最后都执行 (确保最终一致性)
+    onSettled: () => {
+      // 去服务器拉一下最新数据，消除任何潜在的误差
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.GET_POSTS] });
+    },
+  });
+};
 
 export const useSavePost=()=>{
     const queryClient = useQueryClient();
