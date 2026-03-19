@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import GridPostList from "@/components/shared/GridPostList";
 import PostStars from "@/components/shared/PostStats";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,12 @@ const PostDetails = () => {
   const { user } = useUserContext();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  // 换一篇帖子时从第一张开始，避免上一帖的索引大于新帖张数
+  useEffect(() => {
+    setCurrentImageIndex(0);
+    setSelectedImage(null);
+  }, [id]);
 
   const navigate = useNavigate();
   const { data: userPosts, isPending: isUserPostLoading } = useGetUserPosts(

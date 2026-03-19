@@ -74,36 +74,116 @@ export const useLikePost = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ postId, likesArray }: { postId: string; likesArray: string[] }) =>
+    mutationFn: ({ postId, likesArray, version }: { postId: string; likesArray: string[]; version: number }) =>
       likePost(postId, likesArray),
-    
-    // 1. 发起请求前立刻执行 (乐观更新的核心)
-    onMutate: async ({ postId, likesArray }) => {
-      // a. 撤销相关的正在进行的后台重新获取请求，防止冲突
-      await queryClient.cancelQueries({ queryKey: [QUERY_KEYS.GET_POSTS] });
 
-      // b. 截屏保存当前缓存中的旧数据 (为了失败时回滚)
-      const previousPosts = queryClient.getQueryData([QUERY_KEYS.GET_POSTS]);
+    onMutate: async ({ postId, likesArray, version }) => {
+      // 1) 取消相关查询
+      await queryClient.cancelQueries({ queryKey: [QUERY_KEYS.GET_INFINITE_POSTS] });
+      await queryClient.cancelQueries({ queryKey: [QUERY_KEYS.GET_RECENT_POSTS] });
+      await queryClient.cancelQueries({ queryKey: [QUERY_KEYS.GET_POST_BY_ID, postId] });
 
-      // c. 乐观地更新缓存！(不用等后端，直接把缓存里的 likes 数组替换掉)
-      // 注意：这里需要根据你缓存的具体结构 (InfiniteData 或 Array) 来精确修改，
-      // 简单起见，我们通知整体缓存刷新，但更好的做法是直接操作 queryClient.setQueryData
+      // 2) 快照
+      const previousInfinitePosts = queryClient.getQueryData([QUERY_KEYS.GET_INFINITE_POSTS]);
+      const previousRecentPosts = queryClient.getQueryData([QUERY_KEYS.GET_RECENT_POSTS]);
+      const previousPostById = queryClient.getQueryData([QUERY_KEYS.GET_POST_BY_ID, postId]);
+
+      // 3) 真正乐观更新：Infinite 列表（带版本号）
+      queryClient.setQueryData([QUERY_KEYS.GET_INFINITE_POSTS], (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            documents: page.documents.map((doc: any) =>
+              doc.$id === postId ? { ...doc, likes: likesArray, _likeVersion: version } : doc
+            ),
+          })),
+        };
+      });
+
+      // 4) Recent 列表（如果页面也在用）
+      queryClient.setQueryData([QUERY_KEYS.GET_RECENT_POSTS], (old: any) => {
+        if (!old?.documents) return old;
+        return {
+          ...old,
+          documents: old.documents.map((doc: any) =>
+            doc.$id === postId ? { ...doc, likes: likesArray, _likeVersion: version } : doc
+          ),
+        };
+      });
+
+      // 5) 单帖详情
+      queryClient.setQueryData([QUERY_KEYS.GET_POST_BY_ID, postId], (old: any) =>
+        old ? { ...old, likes: likesArray, _likeVersion: version } : old
+      );
+
+      return { previousInfinitePosts, previousRecentPosts, previousPostById, postId, version };
+    },
+
+    onError: (_err, _vars, ctx) => {
+      if (!ctx) return;
+      queryClient.setQueryData([QUERY_KEYS.GET_INFINITE_POSTS], ctx.previousInfinitePosts);
+      queryClient.setQueryData([QUERY_KEYS.GET_RECENT_POSTS], ctx.previousRecentPosts);
+      queryClient.setQueryData([QUERY_KEYS.GET_POST_BY_ID, ctx.postId], ctx.previousPostById);
+    },
+
+    onSuccess: (data, vars) => {
+      // 防护：只有当响应的版本号 >= 当前缓存版本号时，才应用响应数据
+      // 避免旧请求的响应覆盖新请求的乐观更新
       
-      return { previousPosts }; // 把旧数据传递给 onError
-    },
+      const currentInfinitePosts = queryClient.getQueryData([QUERY_KEYS.GET_INFINITE_POSTS]) as any;
+      const currentRecentPosts = queryClient.getQueryData([QUERY_KEYS.GET_RECENT_POSTS]) as any;
+      const currentPostById = queryClient.getQueryData([QUERY_KEYS.GET_POST_BY_ID, vars.postId]) as any;
 
-    // 2. 如果请求失败了 (回滚)
-    onError: (err, newLike, context) => {
-      // 恢复到 onMutate 中保存的旧数据
-      if (context?.previousPosts) {
-        queryClient.setQueryData([QUERY_KEYS.GET_POSTS], context.previousPosts);
+      // 检查当前缓存中的版本号
+      let targetVersion = 0;
+      if (currentPostById?._likeVersion) {
+        targetVersion = currentPostById._likeVersion;
       }
+
+      // 只有当响应版本不低于目标版本时，才更新
+      const shouldUpdate = vars.version >= targetVersion;
+
+      if (!shouldUpdate) {
+        // 旧版本的响应已到达，忽略它
+        return;
+      }
+
+      // 应用响应数据
+      queryClient.setQueryData([QUERY_KEYS.GET_INFINITE_POSTS], (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            documents: page.documents.map((doc: any) =>
+              doc.$id === vars.postId ? { ...doc, likes: data.likes, _likeVersion: vars.version } : doc
+            ),
+          })),
+        };
+      });
+
+      queryClient.setQueryData([QUERY_KEYS.GET_RECENT_POSTS], (old: any) => {
+        if (!old?.documents) return old;
+        return {
+          ...old,
+          documents: old.documents.map((doc: any) =>
+            doc.$id === vars.postId ? { ...doc, likes: data.likes, _likeVersion: vars.version } : doc
+          ),
+        };
+      });
+
+      queryClient.setQueryData([QUERY_KEYS.GET_POST_BY_ID, vars.postId], (old: any) =>
+        old ? { ...old, likes: data.likes, _likeVersion: vars.version } : old
+      );
     },
 
-    // 3. 无论成功或失败，最后都执行 (确保最终一致性)
-    onSettled: () => {
-      // 去服务器拉一下最新数据，消除任何潜在的误差
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.GET_POSTS] });
+    onSettled: (_data, _err, vars) => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.GET_INFINITE_POSTS] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.GET_RECENT_POSTS] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.GET_POST_BY_ID, vars.postId] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.GET_CURRENT_USER] });
     },
   });
 };

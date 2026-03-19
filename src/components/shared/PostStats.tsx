@@ -23,6 +23,8 @@ const PostStats = ({ post, userId }: PostStatsProps) => {
 
   const [likes, setLikes] = useState<string[]>(getLikes(post?.likes ?? []));
   const [isSaved, setIsSaved] = useState(false);
+  // 版本号：用于竞态条件检测
+  const [likeVersion, setLikeVersion] = useState(0);
 
   const { mutate: likePost } = useLikePost();
   const { mutate: savePost } = useSavePost();
@@ -58,8 +60,17 @@ const PostStats = ({ post, userId }: PostStatsProps) => {
     } else {
       newLikes.push(userId);
     }
+
+    // 递增版本号，用于竞态条件检测
+    const newVersion = likeVersion + 1;
     setLikes(newLikes);
-    likePost({ postId: post?.$id || "", likesArray: newLikes });
+    setLikeVersion(newVersion);
+
+    likePost({
+      postId: post?.$id || "",
+      likesArray: newLikes,
+      version: newVersion, // 传递版本号
+    });
   };
 
   const handleSavePost = (e: React.MouseEvent) => {

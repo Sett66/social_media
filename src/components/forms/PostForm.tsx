@@ -201,8 +201,9 @@ const PostForm = ({ post, action }: PostFormProps) => {
               <FormLabel className="shad-form_lable">Add Photos</FormLabel>
               <FormControl>
                 <FileUploader
-                  fieldChange={field.onChange}
-                  mediaUrls={keptImageUrls}
+                  fieldChange={field.onChange} // 通过field.onChange把选中的文件传回react-hook-form
+                  mediaUrls={keptImageUrls} // 在编辑模式下已存在的旧图URL
+                  // 删除旧图时的回调，先把不要的旧图记录下来，最终提交的时候统一处理
                   onRemoveExisting={(index) => {
                     setRemovedImageIds((prev) => {
                       const id = keptImageIds[index];

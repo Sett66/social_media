@@ -9,29 +9,39 @@ type FileUploaderProps = {
 };
 
 // FileUploader.tsx（核心修改）
-
-const FileUploader = ({ fieldChange, mediaUrls = [], onRemoveExisting }: FileUploaderProps) => {
-  // existing urls come from post (edit mode), new urls from just dropped files
+const FileUploader = ({
+  fieldChange,
+  mediaUrls = [],
+  onRemoveExisting,
+}: FileUploaderProps) => {
+  const [files, setFiles] = useState<FileWithPath[]>([]); //真正的新增文件对象数组，要提交到后端的文件本体
   const [newFileUrls, setNewFileUrls] = useState<string[]>([]);
-  const [files, setFiles] = useState<FileWithPath[]>([]);
+  // 这些新增文件的本地预览URL数组，用来给前端展示的，通过URL.CreateObjectURL生成的临时URL
 
   // 把本地 state 中的 files 同步给 RHF 的 fieldChange，放在 effect 里避免「渲染期间更新父组件」的警告
   useEffect(() => {
     fieldChange(files as File[]);
   }, [files, fieldChange]);
 
-  const allUrls = useMemo(() => [...mediaUrls, ...newFileUrls], [mediaUrls, newFileUrls]);
+  const allUrls = useMemo(
+    () => [...mediaUrls, ...newFileUrls],
+    [mediaUrls, newFileUrls],
+  );
 
   const onDrop = useCallback(
     (acceptedFiles: FileWithPath[]) => {
       setFiles((prev) => {
+        // 新文件直接追加到files数组
         return [...prev, ...acceptedFiles];
       });
-
-      setNewFileUrls((prev) => [...prev, ...acceptedFiles.map((f) => URL.createObjectURL(f))]);
+      // 同时生成新文件的预览url，并追加到newFileUrls数组
+      setNewFileUrls((prev) => [
+        ...prev,
+        ...acceptedFiles.map((f) => URL.createObjectURL(f)),
+      ]);
     },
-    [fieldChange]
-  );
+    [fieldChange],
+  ); // 也就是说用户选完图片就显示了预览图，其实还没有上传到云端，只有点击提交的时候才会正式上传
 
   const removeAt = useCallback(
     (index: number) => {
@@ -56,12 +66,12 @@ const FileUploader = ({ fieldChange, mediaUrls = [], onRemoveExisting }: FileUpl
         return next;
       });
     },
-    [fieldChange, mediaUrls.length, onRemoveExisting]
+    [fieldChange, mediaUrls.length, onRemoveExisting],
   );
 
   const { getRootProps, getInputProps } = useDropzone({
     onDrop,
-    multiple: true,                // 允许多选
+    multiple: true, // 允许多选
     accept: {
       "image/*": [".jpeg", ".png", ".jpg", ".svg"],
     },
