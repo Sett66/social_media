@@ -23,7 +23,7 @@ import {
   useUpdatePost,
 } from "@/lib/react-query/queriesAndMutations";
 import type { Post } from "@/types";
-import { generateCaptionWithGemini } from "@/lib/gemini/generateCaption";
+import { generateCaptionWithGeminiStream } from "@/lib/gemini/generateCaption";
 import { useEffect, useMemo, useState } from "react";
 
 /**
@@ -91,6 +91,7 @@ const PostForm = ({ post, action }: PostFormProps) => {
   const [removedImageIds, setRemovedImageIds] = useState<string[]>([]);
   const [aiPromptHint, setAiPromptHint] = useState("");
   const [isGeneratingCaption, setIsGeneratingCaption] = useState(false);
+  const [streamStatusText, setStreamStatusText] = useState("");
 
   // when switching between posts (or initial fetch), refresh kept lists
   useEffect(() => {
@@ -145,10 +146,28 @@ const PostForm = ({ post, action }: PostFormProps) => {
 
     setIsGeneratingCaption(true);
     try {
-      const generatedCaption = await generateCaptionWithGemini(
-        imageSources.length > 0 ? imageSources : undefined,
-        aiPromptHint || undefined,
-      );
+      form.setValue("caption", "");
+      setStreamStatusText("正在流式生成...");
+
+      const generatedCaption = await generateCaptionWithGeminiStream({
+        imageSources: imageSources.length > 0 ? imageSources : undefined,
+        userPrompt: aiPromptHint || undefined,
+        onChunk: (chunk) => {
+          const currentCaption = form.getValues("caption");
+          form.setValue("caption", `${currentCaption}${chunk}`);
+        },
+        onStatus: (status, attempt) => {
+          if (status === "reconnecting") {
+            setStreamStatusText(`网络波动，正在重连（第 ${attempt} 次）...`);
+            return;
+          }
+          if (status === "done") {
+            setStreamStatusText("生成完成");
+            return;
+          }
+          setStreamStatusText("正在流式生成...");
+        },
+      });
       // Extract hashtags from the end of caption
       const { caption, hashtags } =
         extractHashtagsFromCaption(generatedCaption);
@@ -181,6 +200,7 @@ const PostForm = ({ post, action }: PostFormProps) => {
       console.error(err);
     } finally {
       setIsGeneratingCaption(false);
+      setTimeout(() => setStreamStatusText(""), 1500);
     }
   };
 
@@ -250,6 +270,9 @@ const PostForm = ({ post, action }: PostFormProps) => {
               {isGeneratingCaption ? "生成中..." : "AI 生成 Caption"}
             </Button>
           </div>
+          {streamStatusText && (
+            <p className="text-xs text-light-4">{streamStatusText}</p>
+          )}
         </div>
         {/* )} */}
         <FormField
