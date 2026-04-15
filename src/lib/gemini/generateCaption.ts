@@ -1,6 +1,7 @@
 import { GoogleGenAI, createPartFromBase64 } from "@google/genai";
 
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+const MODEL_NAME = "gemini-2.5-flash";
 
 /**
  * 将 File 转为 base64 字符串
@@ -66,38 +67,11 @@ export async function generateCaptionWithGemini(
     }
   }
 
-  const hasImages = !!(imageSources && imageSources.length > 0);
-  const trimmedHint = userPrompt?.trim();
-  const prompt = (() => {
-    if (hasImages) {
-      if (trimmedHint) {
-        return `根据这些图片和用户提供的提示，直接生成一段适合社交媒体的 caption，是能直接发布的，没有其他多余的输出。用户提示：${trimmedHint}\n\n请用简洁、自然的语言写一段 caption，长度适中。`;
-      }
-      return "根据这些图片，生成一段适合社交媒体的 caption。请用简洁、自然的语言描述图片内容，长度适中。";
-    }
-    // no images
-    if (trimmedHint) {
-      return `根据用户提供的提示，生成一段适合社交媒体的 caption。用户提示：${trimmedHint}\n\n请用简洁、自然的语言写一段 caption，长度适中。`;
-    }
-    return "请生成一段适合社交媒体的通用 caption，使用简洁、自然的语言。";
-  })();
-
-  // build parts array for model
-  const parts: any[] = [{ text: prompt }];
-  if (hasImages) {
-    for (const src of imageSources!) {
-      try {
-        const { data, mimeType } = await normalize(src);
-        parts.push({ inlineData: { mimeType, data } });
-      } catch (err) {
-        console.warn("failed to convert image for caption", err);
-      }
-    }
-  }
+  const parts = await buildGeminiParts(imageSources, userPrompt, normalize);
 
   const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: MODEL_NAME,
     contents: [
       {
         role: "user",
@@ -111,4 +85,146 @@ export async function generateCaptionWithGemini(
     throw new Error("未能从 AI 获取 caption");
   }
   return text.trim();
+}
+
+type StreamStatus = "streaming" | "reconnecting" | "done";
+
+type StreamOptions = {
+  imageSources?: Array<File | string>;
+  userPrompt?: string;
+  onChunk: (chunk: string) => void;
+  onStatus?: (status: StreamStatus, attempt: number) => void;
+  maxReconnectAttempts?: number;
+};
+
+function isRetryableError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("network") ||
+    msg.includes("fetch") ||
+    msg.includes("timeout") ||
+    msg.includes("503") ||
+    msg.includes("500") ||
+    msg.includes("rate") ||
+    msg.includes("unavailable")
+  );
+}
+
+function mergeContinuationText(currentText: string, nextText: string): string {
+  const cleanNext = nextText.trimStart();
+  if (!currentText) return cleanNext;
+  if (!cleanNext) return "";
+
+  // Avoid duplicated output between reconnection retries
+  const maxOverlap = Math.min(currentText.length, cleanNext.length, 80);
+  for (let overlap = maxOverlap; overlap > 0; overlap--) {
+    if (currentText.endsWith(cleanNext.slice(0, overlap))) {
+      return cleanNext.slice(overlap);
+    }
+  }
+  return cleanNext;
+}
+
+async function buildGeminiParts(
+  imageSources: Array<File | string> | undefined,
+  userPrompt: string | undefined,
+  normalize: (source: File | string) => Promise<{ data: string; mimeType: string }>
+) {
+  const hasImages = !!(imageSources && imageSources.length > 0);
+  const trimmedHint = userPrompt?.trim();
+  const prompt = (() => {
+    if (hasImages) {
+      if (trimmedHint) {
+        return `根据这些图片和用户提供的提示，直接生成一段适合社交媒体的 caption，是能直接发布的，没有其他多余的输出。用户提示：${trimmedHint}\n\n请用简洁、自然的语言写一段 caption，长度适中。`;
+      }
+      return "根据这些图片，生成一段适合社交媒体的 caption。请用简洁、自然的语言描述图片内容，长度适中。";
+    }
+    if (trimmedHint) {
+      return `根据用户提供的提示，生成一段适合社交媒体的 caption。用户提示：${trimmedHint}\n\n请用简洁、自然的语言写一段 caption，长度适中。`;
+    }
+    return "请生成一段适合社交媒体的通用 caption，使用简洁、自然的语言。";
+  })();
+
+  const parts: Array<{ text: string } | ReturnType<typeof createPartFromBase64>> = [
+    { text: prompt },
+  ];
+  if (!hasImages) return parts;
+
+  for (const src of imageSources!) {
+    try {
+      const { data, mimeType } = await normalize(src);
+      parts.push(createPartFromBase64(data, mimeType));
+    } catch (err) {
+      console.warn("failed to convert image for caption", err);
+    }
+  }
+  return parts;
+}
+
+export async function generateCaptionWithGeminiStream({
+  imageSources,
+  userPrompt,
+  onChunk,
+  onStatus,
+  maxReconnectAttempts = 2,
+}: StreamOptions): Promise<string> {
+  if (!apiKey) {
+    throw new Error("未配置 VITE_GEMINI_API_KEY，请在 .env.local 中设置");
+  }
+
+  async function normalize(source: File | string) {
+    if (source instanceof File) {
+      const data = await fileToBase64(source);
+      return { data, mimeType: source.type || "image/jpeg" };
+    }
+    return await urlToBase64(source);
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+  const baseParts = await buildGeminiParts(imageSources, userPrompt, normalize);
+  let finalText = "";
+  let attempt = 0;
+
+  while (attempt <= maxReconnectAttempts) {
+    onStatus?.(attempt === 0 ? "streaming" : "reconnecting", attempt);
+    try {
+      const resumedParts =
+        finalText.length > 0
+          ? [
+              ...baseParts,
+              {
+                text: `你刚刚生成到这里：\n${finalText}\n\n请从下一句继续输出，不要重复已生成内容。`,
+              },
+            ]
+          : baseParts;
+      const stream = await ai.models.generateContentStream({
+        model: MODEL_NAME,
+        contents: [{ role: "user", parts: resumedParts }],
+      });
+
+      for await (const chunk of stream) {
+        const chunkText = chunk.text;
+        if (!chunkText) continue;
+
+        const delta = attempt === 0 ? chunkText : mergeContinuationText(finalText, chunkText);
+        if (!delta) continue;
+        finalText += delta;
+        onChunk(delta);
+      }
+
+      onStatus?.("done", attempt);
+      const trimmed = finalText.trim();
+      if (!trimmed) throw new Error("未能从 AI 获取 caption");
+      return trimmed;
+    } catch (err) {
+      if (attempt >= maxReconnectAttempts || !isRetryableError(err)) {
+        throw err;
+      }
+      attempt += 1;
+      await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
+    }
+  }
+
+  throw new Error("流式生成失败，请稍后重试");
 }
