@@ -7,20 +7,80 @@ import {
   useSearchPosts,
 } from "@/lib/react-query/queriesAndMutations";
 import { Loader } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useInView } from "react-intersection-observer";
+import { useVirtualizer } from "@tanstack/react-virtual";
+
+const ROW_HEIGHT = 340;
+const LOAD_MORE_ROOT_MARGIN = "0px 0px 320px 0px";
 
 const Explore = () => {
-  const { ref, inView } = useInView();
-  const { data: posts, fetchNextPage, hasNextPage } = useGetPosts();
+  const { ref: loadMoreRef, inView } = useInView({
+    rootMargin: LOAD_MORE_ROOT_MARGIN,
+  });
+  const {
+    data: posts,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useGetPosts();
   const [searchValue, setSearchValue] = useState("");
+  const [columnCount, setColumnCount] = useState(3);
   const debounceValue = useDebounce(searchValue, 500);
   const { data: searchedPosts, isFetching: isSearchFetching } =
     useSearchPosts(debounceValue);
 
+  const allPosts = posts?.pages.flatMap((page) => page.documents) || [];
+  const parentRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (inView && !searchValue) fetchNextPage();
-  }, [inView, searchValue]);
+    const handleResize = () => {
+      const width = window.innerWidth;
+
+      // Keep virtual row grouping in sync with `.grid-container` breakpoints:
+      // grid-cols-1 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3
+      if (width >= 1280) {
+        setColumnCount(3);
+      } else if (width >= 1024) {
+        setColumnCount(2);
+      } else if (width >= 768) {
+        setColumnCount(1);
+      } else if (width >= 640) {
+        setColumnCount(2);
+      } else {
+        setColumnCount(1);
+      }
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const rows = useMemo(() => {
+    const result: (typeof allPosts)[] = [];
+    for (let i = 0; i < allPosts.length; i += columnCount) {
+      result.push(allPosts.slice(i, i + columnCount));
+    }
+    return result;
+  }, [allPosts, columnCount]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 2,
+  });
+
+  useEffect(() => {
+    rowVirtualizer.measure();
+  }, [columnCount, rows.length, rowVirtualizer]);
+
+  useEffect(() => {
+    if (inView && !searchValue && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [inView, searchValue, hasNextPage, isFetchingNextPage]);
 
   if (!posts) {
     return (
@@ -34,6 +94,7 @@ const Explore = () => {
   const shouldShowPosts =
     !shouldShowSearchResults &&
     posts?.pages.every((item) => item.documents.length === 0);
+
   return (
     <div className="explore-container">
       <div className="explore-inner_container">
@@ -69,23 +130,51 @@ const Explore = () => {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-9 w-full max-w-5xl">
-        {shouldShowSearchResults ? (
-          <SearchResults
-            isSearchFetching={isSearchFetching}
-            searchedPosts={searchedPosts}
-          />
-        ) : shouldShowPosts ? (
-          <p className="text-light-4 mt-10 text-center w-full ">End of Posts</p>
-        ) : (
-          posts.pages.map((item, index) => (
-            <GridPostList key={`page-${index}`} posts={item.documents} />
-          ))
-        )}
-      </div>
-      {hasNextPage && !searchValue && (
-        <div ref={ref} className="mt-10">
-          <Loader />
+      {shouldShowSearchResults ? (
+        <SearchResults
+          isSearchFetching={isSearchFetching}
+          searchedPosts={searchedPosts}
+        />
+      ) : shouldShowPosts ? (
+        <p className="text-light-4 mt-10 text-center w-full ">End of Posts</p>
+      ) : (
+        <div
+          ref={parentRef}
+          className="w-full max-w-5xl overflow-x-hidden overflow-y-auto custom-scrollbar"
+          style={{ height: "calc(100vh)" }}
+        >
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize() + (hasNextPage ? 100 : 0)}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => (
+              <div
+                key={virtualRow.index}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: `${virtualRow.size}px`,
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                <GridPostList
+                  posts={rows[virtualRow.index]}
+                  showUser={true}
+                  showStats={true}
+                />
+              </div>
+            ))}
+          </div>
+          {hasNextPage && !searchValue && (
+            <div ref={loadMoreRef} className="flex-center py-4">
+              <Loader />
+            </div>
+          )}
         </div>
       )}
     </div>

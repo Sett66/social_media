@@ -1,8 +1,8 @@
 import { useUserContext } from "@/context/AuthContext";
 import type { Models } from "appwrite";
-import React from "react";
 import { Link } from "react-router-dom";
 import PostStats from "./PostStats";
+import LazyImage from "./LazyImage";
 
 type GridPostListProps = {
   posts: Models.Document[];
@@ -23,7 +23,7 @@ const GridPostList = ({
         <li key={post.$id} className="relative min-w-80 h-80">
           <Link to={`/posts/${post.$id}`} className="grid-post_link">
             {((post.imageUrls?.[0] as any) ?? post.imageUrl) ? (
-              <img
+              <LazyImage
                 src={(post.imageUrls?.[0] as any) ?? post.imageUrl}
                 alt="post"
                 className="h-full w-full object-cover"
