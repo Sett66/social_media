@@ -2,6 +2,7 @@ import GridPostList from "@/components/shared/GridPostList";
 import SearchResults from "@/components/shared/SearchResults";
 import { Input } from "@/components/ui/input";
 import useDebounce from "@/hooks/useDebounce";
+import useResponsiveColumns from "@/hooks/useResponsiveColumns";
 import {
   useGetPosts,
   useSearchPosts,
@@ -13,6 +14,12 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 
 const ROW_HEIGHT = 340;
 const LOAD_MORE_ROOT_MARGIN = "0px 0px 320px 0px";
+const COLUMN_RULES = [
+  { query: "(min-width: 1280px)", columns: 3 }, // xl
+  { query: "(min-width: 1024px)", columns: 2 }, // lg
+  { query: "(min-width: 768px)", columns: 1 }, // md
+  { query: "(min-width: 640px)", columns: 2 }, // sm
+];
 
 const Explore = () => {
   const { ref: loadMoreRef, inView } = useInView({
@@ -25,37 +32,13 @@ const Explore = () => {
     isFetchingNextPage,
   } = useGetPosts();
   const [searchValue, setSearchValue] = useState("");
-  const [columnCount, setColumnCount] = useState(3);
+  const columnCount = useResponsiveColumns(COLUMN_RULES, 1);
   const debounceValue = useDebounce(searchValue, 500);
   const { data: searchedPosts, isFetching: isSearchFetching } =
     useSearchPosts(debounceValue);
 
   const allPosts = posts?.pages.flatMap((page) => page.documents) || [];
   const parentRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleResize = () => {
-      const width = window.innerWidth;
-
-      // Keep virtual row grouping in sync with `.grid-container` breakpoints:
-      // grid-cols-1 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3
-      if (width >= 1280) {
-        setColumnCount(3);
-      } else if (width >= 1024) {
-        setColumnCount(2);
-      } else if (width >= 768) {
-        setColumnCount(1);
-      } else if (width >= 640) {
-        setColumnCount(2);
-      } else {
-        setColumnCount(1);
-      }
-    };
-
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
 
   const rows = useMemo(() => {
     const result: (typeof allPosts)[] = [];

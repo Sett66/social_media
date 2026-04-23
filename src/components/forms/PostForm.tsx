@@ -26,6 +26,13 @@ import type { Post } from "@/types";
 import { generateCaptionWithGeminiStream } from "@/lib/gemini/generateCaption";
 import { useEffect, useMemo, useState } from "react";
 
+function sanitizeChunk(chunk: string): string {
+  return chunk
+    .replace(/\uFFFD/g, "")                  // replacement char
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "") // control chars
+    .replace(/[^\S\r\n]{3,}/g, " ");         // excessive spaces
+}
+
 /**
  * Extract hashtags from the end of caption text
  * Returns cleaned caption and hashtags formatted with # separator
@@ -153,8 +160,9 @@ const PostForm = ({ post, action }: PostFormProps) => {
         imageSources: imageSources.length > 0 ? imageSources : undefined,
         userPrompt: aiPromptHint || undefined,
         onChunk: (chunk) => {
+          const sanitizedChunk = sanitizeChunk(chunk);
           const currentCaption = form.getValues("caption");
-          form.setValue("caption", `${currentCaption}${chunk}`);
+          form.setValue("caption", `${currentCaption}${sanitizedChunk}`);
         },
         onStatus: (status, attempt) => {
           if (status === "reconnecting") {
