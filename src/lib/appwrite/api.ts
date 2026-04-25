@@ -1,7 +1,78 @@
 import type { INewPost, INewUser, IUpdatePost, IUpdateUser } from "@/types";
-import { account, appwriteConfig, avatars, databases, storage } from "./config"
+import { account, appwriteConfig, avatars, databases, functions, storage } from "./config"
 
 import{ AppwriteException, ID, ImageGravity, Query, OAuthProvider } from 'appwrite'
+
+type CaptionImageInput = { data: string; mimeType: string };
+
+function parseDataUrl(dataUrl: string): CaptionImageInput | null {
+  const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
+  if (!match) return null;
+  return { mimeType: match[1], data: match[2] };
+}
+
+async function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function urlToDataUrl(url: string): Promise<string> {
+  const res = await fetch(url, { mode: "cors" });
+  if (!res.ok) throw new Error("无法加载图片");
+  const blob = await res.blob();
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function generateCaptionViaAppwriteFunction(params: {
+  imageSources?: Array<File | string>;
+  userPrompt?: string;
+}): Promise<string> {
+  const functionId = appwriteConfig.generateCaptionFunctionId;
+  if (!functionId) {
+    throw new Error("未配置 VITE_APPWRITE_GENERATE_CAPTION_FUNCTION_ID");
+  }
+
+  const images: CaptionImageInput[] = [];
+  const sources = params.imageSources ?? [];
+  for (const src of sources) {
+    const dataUrl = src instanceof File ? await fileToDataUrl(src) : await urlToDataUrl(src);
+    const parsed = parseDataUrl(dataUrl);
+    if (parsed) images.push(parsed);
+  }
+
+  const execution = await functions.createExecution(
+    functionId,
+    JSON.stringify({
+      userPrompt: params.userPrompt,
+      images: images.length ? images : undefined,
+    }),
+    false
+  );
+
+  const responseBody = (execution as any)?.responseBody;
+  if (typeof responseBody === "string" && responseBody.trim()) {
+    try {
+      const parsed = JSON.parse(responseBody);
+      const caption = typeof parsed?.caption === "string" ? parsed.caption.trim() : "";
+      if (caption) return caption;
+      const message = typeof parsed?.message === "string" ? parsed.message : "";
+      throw new Error(message || "AI 生成失败");
+    } catch {
+      return responseBody.trim();
+    }
+  }
+
+  throw new Error("Function 未返回 caption");
+}
 
 export async function createUserAccount(user:INewUser){
    try{
@@ -318,7 +389,7 @@ export async function updatePost(post:IUpdatePost){
             post.imageUrls ??
             ((post as any).imageUrl ? [(post as any).imageUrl] : []);
 
-        let newUploaded: { id: string; url: URL }[] = [];
+        let newUploaded: { id: string; url: string }[] = [];
         if(hasFileToUpdate){
             newUploaded = await Promise.all(
                 post.file.map(async (f) => {

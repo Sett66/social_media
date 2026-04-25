@@ -23,15 +23,8 @@ import {
   useUpdatePost,
 } from "@/lib/react-query/queriesAndMutations";
 import type { Post } from "@/types";
-import { generateCaptionWithGeminiStream } from "@/lib/gemini/generateCaption";
+import { generateCaptionViaAppwriteFunction } from "@/lib/appwrite/api";
 import { useEffect, useMemo, useState } from "react";
-
-function sanitizeChunk(chunk: string): string {
-  return chunk
-    .replace(/\uFFFD/g, "")                  // replacement char
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "") // control chars
-    .replace(/[^\S\r\n]{3,}/g, " ");         // excessive spaces
-}
 
 /**
  * Extract hashtags from the end of caption text
@@ -154,27 +147,11 @@ const PostForm = ({ post, action }: PostFormProps) => {
     setIsGeneratingCaption(true);
     try {
       form.setValue("caption", "");
-      setStreamStatusText("正在流式生成...");
+      setStreamStatusText("正在生成...");
 
-      const generatedCaption = await generateCaptionWithGeminiStream({
+      const generatedCaption = await generateCaptionViaAppwriteFunction({
         imageSources: imageSources.length > 0 ? imageSources : undefined,
         userPrompt: aiPromptHint || undefined,
-        onChunk: (chunk) => {
-          const sanitizedChunk = sanitizeChunk(chunk);
-          const currentCaption = form.getValues("caption");
-          form.setValue("caption", `${currentCaption}${sanitizedChunk}`);
-        },
-        onStatus: (status, attempt) => {
-          if (status === "reconnecting") {
-            setStreamStatusText(`网络波动，正在重连（第 ${attempt} 次）...`);
-            return;
-          }
-          if (status === "done") {
-            setStreamStatusText("生成完成");
-            return;
-          }
-          setStreamStatusText("正在流式生成...");
-        },
       });
       // Extract hashtags from the end of caption
       const { caption, hashtags } =
@@ -201,6 +178,7 @@ const PostForm = ({ post, action }: PostFormProps) => {
       } else {
         console.log("[handleGenerateCaption] No hashtags extracted");
       }
+      setStreamStatusText("生成完成");
       toast({ title: "AI caption 生成成功" });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "生成失败，请稍后重试";

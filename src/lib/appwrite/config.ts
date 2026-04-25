@@ -1,4 +1,4 @@
-import { Client, Account, Databases, Avatars, Storage } from 'appwrite';
+import { Client, Account, Databases, Avatars, Storage, Functions } from 'appwrite';
 import { data } from 'react-router-dom';
 
 export const appwriteConfig = {
@@ -9,6 +9,7 @@ export const appwriteConfig = {
     userCollectionId: import.meta.env.VITE_APPWRITE_USER_COLLECTION_ID,
     postCollectionId: import.meta.env.VITE_APPWRITE_POST_COLLECTION_ID, 
     savesCollectionId: import.meta.env.VITE_APPWRITE_SAVES_COLLECTION_ID,
+    generateCaptionFunctionId: import.meta.env.VITE_APPWRITE_GENERATE_CAPTION_FUNCTION_ID,
 }
 
 export const client = new Client();
@@ -18,3 +19,4 @@ export const account = new Account(client);
 export const databases = new Databases(client); 
 export const avatars = new Avatars(client);
 export const storage = new Storage(client);
+export const functions = new Functions(client);
